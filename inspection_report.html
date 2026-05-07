@@ -724,7 +724,20 @@ function init(){
     b.onclick=()=>{selProps.has(p)?(selProps.delete(p),b.classList.remove('on'),removePanel(p)):(selProps.add(p),b.classList.add('on'),addPanel(p));sched();};
     grid.appendChild(b);
   });
+
   renderHome();
+
+  // Auto-sync from cloud on startup so everyone sees latest data
+  if(cloudEnabled){
+    updateSyncUI('loading');
+    cloudPullRecords().then(cloudRecs=>{
+      const localPhotos={};
+      records.forEach(r=>{if(r.propPhotos&&Object.keys(r.propPhotos).length)localPhotos[r.id]=r.propPhotos;});
+      records=cloudRecs.map(r=>({...r,propPhotos:localPhotos[r.id]||{}}));
+      try{localStorage.setItem(LS_REC,JSON.stringify(records));}catch(e){}
+      updateSyncUI('ok','云端已连接 · '+records.length+'条记录');
+    }).catch(()=>updateSyncUI('err','云端连接失败，显示本地数据'));
+  }
 }
 
 // ════════════════════════════════
@@ -2079,11 +2092,16 @@ const LS_SB_URL = 'iv5_sb_url';
 const LS_SB_KEY = 'iv5_sb_key';
 const TABLE     = 'inspection_records';
 
+// ★ 默认云端配置（所有人打开自动连接）
+const DEFAULT_SB_URL = 'https://lxyccnamrgleyxvryhec.supabase.co';
+const DEFAULT_SB_KEY = 'sb_publishable_a7P-BItVgkhFJ6gABxog6Q_DUBAYct4';
+
 let sbUrl = '', sbKey = '', cloudEnabled = false;
 
 function loadCloudConfig(){
-  sbUrl = localStorage.getItem(LS_SB_URL)||'';
-  sbKey = localStorage.getItem(LS_SB_KEY)||'';
+  // 优先用管理员设置的，否则用默认值
+  sbUrl = localStorage.getItem(LS_SB_URL) || DEFAULT_SB_URL;
+  sbKey = localStorage.getItem(LS_SB_KEY) || DEFAULT_SB_KEY;
   cloudEnabled = !!(sbUrl && sbKey);
   updateSyncUI();
   if(cloudEnabled){ document.getElementById('dash-sync-btn').style.display='flex'; }
