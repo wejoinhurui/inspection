@@ -1015,11 +1015,15 @@ function toast(msg){
 // ════════════════════════════════
 //  DASHBOARD
 // ════════════════════════════════
+let _dashSynced = false;
 function renderDash(){
   recFilter='all';roomPropFilter='all';
   renderWeekFilters();renderRecList();renderRoomPropFilters();
-  // Auto-pull from cloud silently on first open
-  if(cloudEnabled){ syncFromCloud(); }
+  // Auto-pull from cloud once (not on every tab switch)
+  if(cloudEnabled && !_dashSynced){
+    _dashSynced = true;
+    syncFromCloud();
+  }
 }
 function goTo_dash(){goTo('dashboard');renderDash();}
 
@@ -2161,14 +2165,14 @@ async function cloudPullRecords(){
   if(!cloudEnabled) throw new Error('未配置云端');
   const rows = await sbFetch(`${TABLE}?order=created_at.asc`);
   return rows.map(r=>({
-    id:         r.id,
+    id:         String(r.id),
     member:     r.member,
     week:       r.week,
     date:       r.date,
     properties: safeJSON(r.properties,[]),
     propRooms:  safeJSON(r.prop_rooms,{}),
     propDims:   safeJSON(r.prop_dims,{}),
-    propPhotos: {}, // photos not synced
+    propPhotos: {},
     improved:   r.improved||null,
     note:       r.note||''
   }));
@@ -2188,17 +2192,16 @@ async function syncFromCloud(){
   updateSyncUI('loading');
   try{
     const cloudRecs = await cloudPullRecords();
-    // Merge: keep local photos, use cloud data as source of truth
     const localPhotos = {};
     records.forEach(r=>{ if(r.propPhotos && Object.keys(r.propPhotos).length) localPhotos[r.id]=r.propPhotos; });
     records = cloudRecs.map(r=>({ ...r, propPhotos: localPhotos[r.id]||{} }));
     try{ localStorage.setItem(LS_REC, JSON.stringify(records)); }catch(e){}
     updateSyncUI('ok', `已同步 ${records.length} 条记录`);
-    renderDash();
+    // Re-render lists without calling renderDash (avoids loop)
+    renderWeekFilters(); renderRecList(); renderRoomPropFilters();
     toast('云端数据已同步 ✓');
   }catch(e){
     updateSyncUI('err', '同步失败：'+e.message.slice(0,30));
-    toast('同步失败：'+e.message.slice(0,40));
   }
 }
 
